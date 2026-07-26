@@ -82,7 +82,7 @@ def preprocess_image(image):
 # UPLOAD GAMBAR
 # ==============================
 uploaded_file = st.file_uploader(
-    "📷 Pilih gambar",
+    " Pilih gambar",
     type=["jpg", "jpeg", "png"]
 )
 
@@ -96,7 +96,7 @@ if uploaded_file is not None:
         use_container_width=True
     )
 
-    if st.button("🔍 Klasifikasi"):
+    if st.button(" Klasifikasi"):
 
         with st.spinner("Melakukan prediksi..."):
 
@@ -114,7 +114,7 @@ if uploaded_file is not None:
 
             confidence = score * 100
 
-            st.error("🦠 **Lumpy Skin Disease (LSD)**")
+            st.error(" **Lumpy Skin Disease (LSD)**")
 
             st.metric(
                 "Confidence",
