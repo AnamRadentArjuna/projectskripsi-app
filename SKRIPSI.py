@@ -31,31 +31,19 @@ MODEL_PATH = "resnet50_baseline_best.h5"
 # LOAD MODEL
 # ==============================
 @st.cache_resource
+@st.cache_resource
 def load_model():
-
-    try:
-
-        # Download model jika belum ada
-        if not os.path.exists(MODEL_PATH):
-
-            url = f"https://drive.google.com/uc?id={FILE_ID}"
-
-            with st.spinner("Mengunduh model, mohon tunggu..."):
-
-                gdown.download(
-                    url,
-                    MODEL_PATH,
-                    quiet=False
-                )
-
-        model = tf.keras.models.load_model(MODEL_PATH)
-
-        return model
-
-    except Exception as e:
-        st.error(f"Gagal memuat model.\n\n{e}")
-        st.stop()
-
+    model_path = "model/resnet50_baseline_best.h5"
+    url = "https://github.com/AnamRadentArjuna/projectskripsi-app/releases/download/V1.0/resnet50_baseline_best.h5"
+    
+    # Unduh file jika belum ada di folder
+    if not os.path.exists(model_path):
+        os.makedirs("model", exist_ok=True)
+        with st.spinner("Mengunduh model dari server..."):
+            urllib.request.urlretrieve(url, model_path)
+    
+    # Load dan kembalikan model
+    return tf.keras.models.load_model(model_path)
 
 model = load_model()
 
