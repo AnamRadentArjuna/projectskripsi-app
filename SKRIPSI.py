@@ -31,7 +31,6 @@ MODEL_PATH = "resnet50_baseline_best.h5"
 # LOAD MODEL
 # ==============================
 @st.cache_resource
-@st.cache_resource
 def load_model():
     model_path = "model/resnet50_baseline_best.h5"
     url = "https://github.com/AnamRadentArjuna/projectskripsi-app/releases/download/V1.0/resnet50_baseline_best.h5"
