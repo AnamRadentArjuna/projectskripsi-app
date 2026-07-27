@@ -1,10 +1,12 @@
 import os
+os.environ["TF_USE_LEGACY_KERAS"] = "1"
 import gdown
 import urllib.request
 import streamlit as st
 import tensorflow as tf
 from PIL import Image
 import numpy as np
+import cv2
 
 # ==============================
 # KONFIGURASI HALAMAN
