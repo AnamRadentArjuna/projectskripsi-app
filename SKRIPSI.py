@@ -39,7 +39,17 @@ def load_model():
     if not os.path.exists(model_path):
         os.makedirs("model", exist_ok=True)
         with st.spinner("Mengunduh model dari server..."):
-            urllib.request.urlretrieve(url, model_path)
+            try:
+                # Menambahkan User-Agent agar tidak diblokir GitHub
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req) as response, open(model_path, 'wb') as out_file:
+                    out_file.write(response.read())
+                    
+            except HTTPError as e:
+                # Ini akan memunculkan error spesifik (misal: 404 Not Found atau 403 Forbidden)
+                raise RuntimeError(f"Gagal mendownload! Error {e.code}: {e.reason}. Pastikan link benar dan repo berstatus PUBLIC.")
+            except Exception as e:
+                raise RuntimeError(f"Error tidak terduga: {e}")
     
     # Load dan kembalikan model
     return tf.keras.models.load_model(model_path)
