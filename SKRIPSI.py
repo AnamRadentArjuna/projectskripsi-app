@@ -1,126 +1,108 @@
-import os
-
-os.environ["TF_USE_LEGACY_KERAS"] = "1"
-
-import urllib.request
 import streamlit as st
-import tensorflow as tf
-from PIL import Image
+import os
+from PIL import Image, ImageEnhance
+import cv2
 import numpy as np
+from tensorflow.keras.models import load_model
 
-# ==============================
-# KONFIGURASI HALAMAN
-# ==============================
-st.set_page_config(
-    page_title="Klasifikasi Lumpy Skin Disease",
-    page_icon="🐄",
-    layout="centered"
-)
+# 1. Konfigurasi Halaman
+st.set_page_config(page_title="Klasifikasi LSD", layout="wide")
 
-st.title("🐄 Sistem Klasifikasi Lumpy Skin Disease (LSD)")
-st.write(
-    "Unggah gambar kulit sapi untuk mendeteksi apakah termasuk "
-    "**Normal Skin** atau **Lumpy Skin Disease (LSD)**."
-)
+# 2. Setup Path Model
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = "https://github.com/AnamRadentArjuna/projectskripsi-app/releases/download/V1.0/resnet50_baseline_best.h5"
 
-# ==============================
-# KONFIGURASI MODEL
-# ==============================
-# !!! PENTING: sesuaikan dua hal ini dengan kondisi training kamu !!!
-
-# 1) Cara preprocessing gambar saat training.
-#    - Jika training pakai ImageDataGenerator(rescale=1./255) -> pakai "rescale"
-#    - Jika training pakai tf.keras.applications.resnet50.preprocess_input -> pakai "resnet"
-PREPROCESS_MODE = "rescale"  # ganti ke "resnet" jika perlu
-
-# 2) Urutan label hasil sigmoid output model (index 0 vs 1).
-#    Cek class_indices dari training kamu (flow_from_directory / image_dataset_from_directory).
-#    Contoh: {'Lumpy Skin': 0, 'Normal Skin': 1} -> LABEL_FOR_SCORE_GE_0_5 = "Normal Skin"
-LABEL_FOR_SCORE_GE_0_5 = "Lumpy Skin Disease (LSD)"
-LABEL_FOR_SCORE_LT_0_5 = "Normal Skin"
-
-MODEL_DIR = "model"
-MODEL_PATH = os.path.join(MODEL_DIR, "resnet50_baseline_best.h5")
-MODEL_URL = "https://github.com/AnamRadentArjuna/projectskripsi-app/releases/download/V1.0/resnet50_baseline_best.h5"
-
-
-# ==============================
-# LOAD MODEL
-# ==============================
 @st.cache_resource
-def load_model():
+def get_model():
     if not os.path.exists(MODEL_PATH):
-        os.makedirs(MODEL_DIR, exist_ok=True)
-        with st.spinner("Mengunduh model dari server..."):
-            urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
+        st.error(f"File model tidak ditemukan di: {MODEL_PATH}")
+        return None
+    return load_model(MODEL_PATH, compile=False)
 
-    # compile=False -> lebih cepat & aman untuk inference-only
-    return tf.keras.models.load_model(MODEL_PATH, compile=False)
+model = get_model()
 
+st.title("Klasifikasi Penyakit Lumpy Skin Disease (LSD) pada Sapi")
 
-model = load_model()
+# 3. Upload File (Dihapus accept_multiple_files=True)
+uploaded_file = st.file_uploader("Upload Gambar Sapi", type=["jpg", "jpeg", "png"])
 
-
-# ==============================
-# PREPROCESSING
-# ==============================
-def preprocess_image(image: Image.Image) -> np.ndarray:
-    image = image.convert("RGB")
-    image = image.resize((224, 224))
-    img = np.array(image).astype(np.float32)
-
-    if PREPROCESS_MODE == "resnet":
-        from tensorflow.keras.applications.resnet50 import preprocess_input
-        img = preprocess_input(img)
-    else:
-        img = img / 255.0
-
-    img = np.expand_dims(img, axis=0)
-    return img
-
-
-# ==============================
-# UPLOAD GAMBAR
-# ==============================
-uploaded_file = st.file_uploader(
-    "Pilih gambar",
-    type=["jpg", "jpeg", "png"]
-)
-
-if uploaded_file is not None:
+if uploaded_file is not None and model is not None:
     image = Image.open(uploaded_file)
-    st.image(
-        image,
-        caption="Gambar yang diunggah",
-        use_container_width=True
-    )
+    tab1, tab2 = st.tabs(["Preprocessing", "Prediksi"])
 
-    if st.button("Klasifikasi"):
-        with st.spinner("Melakukan prediksi..."):
-            img = preprocess_image(image)
-            prediction = model.predict(img, verbose=0)
-            score = float(prediction[0][0])
+    # TAB 1: PREPROCESSING
+    with tab1:
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.subheader("Asli")
+            st.image(image, use_container_width=True)
+        
+        # Resize
+        img_resized = image.resize((224, 224))
+        with col2:
+            st.subheader("Resize (224x224)")
+            st.image(img_resized, use_container_width=True)
+        
+        # CLAHE
+        img_array = np.array(img_resized)
+        lab = cv2.cvtColor(img_array, cv2.COLOR_RGB2LAB)
+        l, a, b = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+        cl = clahe.apply(l)
+        limg = cv2.merge((cl, a, b))
+        img_clahe = cv2.cvtColor(limg, cv2.COLOR_LAB2RGB)
+        
+        with col3:
+            st.subheader("CLAHE")
+            st.image(img_clahe, use_container_width=True)
 
-        st.divider()
-        st.subheader("Hasil Prediksi")
+        # BAGIAN AUGMENTASI
+        st.subheader("Contoh Augmentasi Data")
+        st.write("Variasi gambar untuk mencegah overfitting:")
+        col_a, col_b, col_c, col_d = st.columns(4)
+        
+        with col_a:
+            st.write("**Rotation Range**")
+            st.image(image.rotate(30), use_container_width=True)
+        with col_b:
+            st.write("**Brightness Range**")
+            enhancer = ImageEnhance.Brightness(image)
+            st.image(enhancer.enhance(1.5), use_container_width=True)
+        with col_c:
+            st.write("**Zoom Range**")
+            w, h = image.size
+            zoom = 1.2
+            st.image(image.crop((w*(1-1/zoom)/2, h*(1-1/zoom)/2, w-w*(1-1/zoom)/2, h-h*(1-1/zoom)/2)).resize((w, h)), use_container_width=True)
+        with col_d:
+            st.write("**Fill Mode**")
+            st.image(image.rotate(30, expand=True, fillcolor="black").resize((w, h)), use_container_width=True)
 
-        if score >= 0.5:
-            confidence = score * 100
-            label = LABEL_FOR_SCORE_GE_0_5
-        else:
-            confidence = (1 - score) * 100
-            label = LABEL_FOR_SCORE_LT_0_5
+    # TAB 2: PREDIKSI
+    with tab2:
+        if st.button("Jalankan Prediksi"):
+            with st.spinner("Model sedang menganalisis fitur..."):
+                img_input = np.array(img_clahe) / 255.0
+                img_input = np.expand_dims(img_input, axis=0)
+                
+                prediksi = model.predict(img_input)
+                score = prediksi[0][0]
+                
+                hasil = "Terinfeksi LSD" if score > 0.5 else "Normal Skin"
+                probabilitas = score if score > 0.5 else (1 - score)
+            
+            st.subheader("Hasil Analisis")
+            if hasil == "Normal Skin":
+                st.success(f"**Prediksi: {hasil}**")
+            else:
+                st.error(f"**Prediksi: {hasil}**")
+            
+            st.write(f"Tingkat Keyakinan: {probabilitas*100:.2f}%")
 
-        if label == LABEL_FOR_SCORE_GE_0_5:
-            st.error(f"**{label}**")
-        else:
-            st.success(f"✅ **{label}**")
+    # EXPANDER: ARSITEKTUR
+    with st.expander("Lihat Arsitektur Model"):
+        stringlist = []
+        model.summary(print_fn=lambda x: stringlist.append(x))
+        st.code("\n".join(stringlist), language=None)
 
-        st.metric("Confidence", f"{confidence:.2f}%")
-        st.progress(confidence / 100)
-
-        st.info(
-            "Prediksi ini merupakan hasil model ResNet50 "
-            "dan hanya digunakan sebagai alat bantu. "
-            "Keputusan diagnosis tetap memerlukan pemeriksaan oleh dokter hewan."
-        )
+elif uploaded_file is not None and model is None:
+    st.error("Mohon pastikan file model (.h5) sudah berada di folder yang sama dengan app.py.")
