@@ -1,12 +1,12 @@
 import os
+
 os.environ["TF_USE_LEGACY_KERAS"] = "1"
-import gdown
+
 import urllib.request
 import streamlit as st
 import tensorflow as tf
 from PIL import Image
 import numpy as np
-import cv2
 
 # ==============================
 # KONFIGURASI HALAMAN
@@ -24,10 +24,24 @@ st.write(
 )
 
 # ==============================
-# GOOGLE DRIVE
+# KONFIGURASI MODEL
 # ==============================
-FILE_ID = "1wkI0iK1BxGkLbqjjK5YaozQ7CzXsaqLa"
-MODEL_PATH = "resnet50_baseline_best.h5"
+# !!! PENTING: sesuaikan dua hal ini dengan kondisi training kamu !!!
+
+# 1) Cara preprocessing gambar saat training.
+#    - Jika training pakai ImageDataGenerator(rescale=1./255) -> pakai "rescale"
+#    - Jika training pakai tf.keras.applications.resnet50.preprocess_input -> pakai "resnet"
+PREPROCESS_MODE = "rescale"  # ganti ke "resnet" jika perlu
+
+# 2) Urutan label hasil sigmoid output model (index 0 vs 1).
+#    Cek class_indices dari training kamu (flow_from_directory / image_dataset_from_directory).
+#    Contoh: {'Lumpy Skin': 0, 'Normal Skin': 1} -> LABEL_FOR_SCORE_GE_0_5 = "Normal Skin"
+LABEL_FOR_SCORE_GE_0_5 = "Lumpy Skin Disease (LSD)"
+LABEL_FOR_SCORE_LT_0_5 = "Normal Skin"
+
+MODEL_DIR = "model"
+MODEL_PATH = os.path.join(MODEL_DIR, "resnet50_baseline_best.h5")
+MODEL_URL = "https://github.com/AnamRadentArjuna/projectskripsi-app/releases/download/V1.0/resnet50_baseline_best.h5"
 
 
 # ==============================
@@ -35,17 +49,14 @@ MODEL_PATH = "resnet50_baseline_best.h5"
 # ==============================
 @st.cache_resource
 def load_model():
-    model_path = "model/resnet50_baseline_best.h5"
-    url = "https://github.com/AnamRadentArjuna/projectskripsi-app/releases/download/V1.0/resnet50_baseline_best.h5"
-    
-    # Unduh file jika belum ada di folder
-    if not os.path.exists(model_path):
-        os.makedirs("model", exist_ok=True)
+    if not os.path.exists(MODEL_PATH):
+        os.makedirs(MODEL_DIR, exist_ok=True)
         with st.spinner("Mengunduh model dari server..."):
-            urllib.request.urlretrieve(url, model_path)
-    
-    # Load dan kembalikan model
-    return tf.keras.models.load_model(model_path)
+            urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
+
+    # compile=False -> lebih cepat & aman untuk inference-only
+    return tf.keras.models.load_model(MODEL_PATH, compile=False)
+
 
 model = load_model()
 
@@ -53,18 +64,18 @@ model = load_model()
 # ==============================
 # PREPROCESSING
 # ==============================
-def preprocess_image(image):
-
+def preprocess_image(image: Image.Image) -> np.ndarray:
     image = image.convert("RGB")
-
     image = image.resize((224, 224))
-
     img = np.array(image).astype(np.float32)
 
-    img = img / 255.0
+    if PREPROCESS_MODE == "resnet":
+        from tensorflow.keras.applications.resnet50 import preprocess_input
+        img = preprocess_input(img)
+    else:
+        img = img / 255.0
 
     img = np.expand_dims(img, axis=0)
-
     return img
 
 
@@ -72,56 +83,40 @@ def preprocess_image(image):
 # UPLOAD GAMBAR
 # ==============================
 uploaded_file = st.file_uploader(
-    " Pilih gambar",
+    "Pilih gambar",
     type=["jpg", "jpeg", "png"]
 )
 
 if uploaded_file is not None:
-
     image = Image.open(uploaded_file)
-
     st.image(
         image,
         caption="Gambar yang diunggah",
         use_container_width=True
     )
 
-    if st.button(" Klasifikasi"):
-
+    if st.button("Klasifikasi"):
         with st.spinner("Melakukan prediksi..."):
-
             img = preprocess_image(image)
-
             prediction = model.predict(img, verbose=0)
-
             score = float(prediction[0][0])
 
         st.divider()
-
         st.subheader("Hasil Prediksi")
 
         if score >= 0.5:
-
             confidence = score * 100
-
-            st.error(" **Lumpy Skin Disease (LSD)**")
-
-            st.metric(
-                "Confidence",
-                f"{confidence:.2f}%"
-            )
-
+            label = LABEL_FOR_SCORE_GE_0_5
         else:
-
             confidence = (1 - score) * 100
+            label = LABEL_FOR_SCORE_LT_0_5
 
-            st.success("✅ **Normal Skin**")
+        if label == LABEL_FOR_SCORE_GE_0_5:
+            st.error(f"**{label}**")
+        else:
+            st.success(f"✅ **{label}**")
 
-            st.metric(
-                "Confidence",
-                f"{confidence:.2f}%"
-            )
-
+        st.metric("Confidence", f"{confidence:.2f}%")
         st.progress(confidence / 100)
 
         st.info(
