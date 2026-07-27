@@ -1,6 +1,7 @@
 streamlit
-tensorflow-cpu
-numpy<2.0.0
+tensorflow==2.15.0
+numpy==1.26.4
 Pillow
 opencv-python-headless
+gdown
 h5py
